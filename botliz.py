@@ -108,7 +108,7 @@ async def descargar_bd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    TOKEN = "TU_TOKEN_AQUI"  # Reemplaza con tu token de BotFather
+    TOKEN = "8898604362:AAGc2k3_E6j-gKUpl3nsaXV5JC__62B8xew"  # Reemplaza con tu token de BotFather
 
     # Arrancamos el servidor web en un hilo secundario para cumplir con Render
     t = Thread(target=run_web)
