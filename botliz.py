@@ -1,5 +1,7 @@
 import os
 import sqlite3
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -9,7 +11,20 @@ from telegram.ext import (
     filters,
 )
 
-# 1. Inicializar la base de datos SQLite sencilla
+# Servidor web falso para que Render crea que es una web gratuita y no lo apague
+app_web = Flask("")
+
+
+@app_web.route("/")
+def home():
+    return "Bot de brigadas activo y funcionando correctamente."
+
+
+def run_web():
+    app_web.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+
+# 1. Inicializar la base de datos SQLite
 def init_db():
     conn = sqlite3.connect("brigadas.db")
     cursor = conn.cursor()
@@ -32,17 +47,17 @@ def init_db():
 init_db()
 
 
-# 2. Recibir la ubicación que comparte el brigadista
+# 2. Recibir ubicación
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loc = update.message.location
     context.user_data["lat"] = loc.latitude
     context.user_data["lon"] = loc.longitude
     await update.message.reply_text(
-        "📍 ¡Ubicación recibida con éxito!\nAhora, envíame **solo el número total de volantes** entregados en este punto (ej. 350)."
+        "📍 ¡Ubicación recibida!\nAhora envíame **solo el número total de volantes** entregados (ej. 350)."
     )
 
 
-# 3. Recibir el número de volantes y guardar todo en la base de datos
+# 3. Recibir volantes y guardar en BD
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "lat" not in context.user_data:
         await update.message.reply_text(
@@ -59,7 +74,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             or update.message.from_user.first_name
         )
 
-        # Guardar en SQLite
         conn = sqlite3.connect("brigadas.db")
         cursor = conn.cursor()
         cursor.execute(
@@ -69,10 +83,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         conn.close()
 
-        # Limpiar datos temporales del usuario
         context.user_data.clear()
         await update.message.reply_text(
-            f"✅ ¡Registro guardado correctamente!\nSe registraron {volantes} volantes."
+            f"✅ ¡Registro guardado con éxito! Se registraron {volantes} volantes."
         )
 
     except ValueError:
@@ -81,7 +94,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# 4. Comando para descargar la base de datos directamente al chat
+# 4. Comando para descargar la base de datos
 async def descargar_bd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if os.path.exists("brigadas.db"):
         await update.message.reply_document(
@@ -90,19 +103,29 @@ async def descargar_bd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text(
-            "⚠️ Aún no hay registros guardados en la base de datos."
+            "⚠️ Aún no hay registros en la base de datos."
         )
 
 
-if __name__ == "__main__":
-    # PEGA TU TOKEN DE BOTFATHER AQUÍ ENTRE LAS COMILLAS:
-    TOKEN = "8898604362:AAGc2k3_E6j-gKUpl3nsaXV5JC__62B8xew"
+def main():
+    TOKEN = "TU_TOKEN_AQUI"  # Reemplaza con tu token de BotFather
 
+    # Arrancamos el servidor web en un hilo secundario para cumplir con Render
+    t = Thread(target=run_web)
+    t.start()
+
+    # Arrancamos el bot de Telegram
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("descargar", descargar_bd))
     app.add_handler(MessageHandler(filters.LOCATION, handle_location))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
+    app.add_handler(
+        MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text)
+    )
 
-    print("🤖 Bot de brigadas iniciado y escuchando...")
+    print("🤖 Bot de brigadas iniciado en la nube...")
     app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
